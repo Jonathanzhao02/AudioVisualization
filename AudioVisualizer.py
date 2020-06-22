@@ -15,7 +15,8 @@ from scipy.signal.windows import blackmanharris
 
 
 class AudioVisualizer:
-    def __init__(self, PyAudio, format=pyaudio.paInt16, channels=1, sample_rate=48000, chunk_size=1024, log_mode=False):
+    def __init__(self, PyAudio, format=pyaudio.paInt16, channels=1, sample_rate=48000, chunk_size=1024, log_mode=False,
+                 decay_speed=0.5):
         # setting object variables
         self.PyAudio = PyAudio
         self.format = format
@@ -23,6 +24,7 @@ class AudioVisualizer:
         self.sample_rate = sample_rate
         self.chunk_size = chunk_size
         self.log_mode = log_mode
+        self.decay_speed = decay_speed
 
         self.fft_size = int(self.chunk_size / 2)
         self.fft_size = 2 ** 8
@@ -141,7 +143,7 @@ class AudioVisualizer:
 
         # smooths waveform values to be more easy on the eyes
         if self.prev_y is not None:
-            y = 0.5 * self.prev_y + 0.5 * y
+            y = (1 - self.decay_speed) * self.prev_y + self.decay_speed * y
 
         # apply blackman harris window to data
         window = blackmanharris(self.chunk_size)
@@ -155,7 +157,7 @@ class AudioVisualizer:
 
         # smooths frequency spectrum values to be more easy on the eyes
         if self.prev_y_fft is not None:
-            y_fft = 0.5 * self.prev_y_fft + 0.5 * y_fft
+            y_fft = (1 - self.decay_speed) * self.prev_y_fft + self.decay_speed * y_fft
 
         # plot all data
         self.set_plotdata('waveform', self.x, y)
