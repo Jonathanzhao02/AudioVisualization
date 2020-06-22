@@ -34,7 +34,12 @@ class AudioVisualizer:
 
         # x-axis data for plotting
         self.x = np.arange(0, 2 * self.chunk_size)
-        self.x_fft = np.linspace(0, self.max_freq, self.fft_size + 1)
+
+        # log mode does not support step mode, so x-axis must be shortened
+        if self.log_mode:
+            self.x_fft = np.linspace(0, self.max_freq, self.fft_size)
+        else:
+            self.x_fft = np.linspace(0, self.max_freq, self.fft_size + 1)
 
         # sets up QtPy application + window
         pg.setConfigOptions(antialias=True)
@@ -138,12 +143,12 @@ class AudioVisualizer:
         y = y / self.max_freq
         y = (y + 1) / 2
 
-        # reflects audio across y-axis
-        y = np.concatenate((y, np.flipud(y)))
-
         # smooths waveform values to be more easy on the eyes
         if self.prev_y is not None:
             y = (1 - self.decay_speed) * self.prev_y + self.decay_speed * y
+
+        # new variable to store any non-essential y transformations
+        new_y = np.concatenate((y, np.flipud(y)))
 
         # apply blackman harris window to data
         window = blackmanharris(self.chunk_size)
@@ -160,7 +165,7 @@ class AudioVisualizer:
             y_fft = (1 - self.decay_speed) * self.prev_y_fft + self.decay_speed * y_fft
 
         # plot all data
-        self.set_plotdata('waveform', self.x, y)
+        self.set_plotdata('waveform', self.x, new_y)
         self.set_plotdata('spectrum', self.x_fft, y_fft)
 
         # previous value updates
