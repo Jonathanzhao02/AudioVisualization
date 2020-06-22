@@ -50,6 +50,7 @@ class AudioVisualizer:
             row=1, col=1
         )
 
+        # hides plot axes
         self.waveform.hideAxis('bottom')
         self.waveform.hideAxis('left')
         self.spectrum.hideAxis('bottom')
@@ -135,8 +136,10 @@ class AudioVisualizer:
         y = y / self.max_freq
         y = (y + 1) / 2
 
+        # reflects audio across y-axis
         y = np.concatenate((y, np.flipud(y)))
 
+        # smooths waveform values to be more easy on the eyes
         if self.prev_y is not None:
             y = 0.5 * self.prev_y + 0.5 * y
 
@@ -150,6 +153,7 @@ class AudioVisualizer:
         y_fft = y_fft * 2 / (self.max_freq * 256)
         y_fft = y_fft ** 0.5
 
+        # smooths frequency spectrum values to be more easy on the eyes
         if self.prev_y_fft is not None:
             y_fft = 0.5 * self.prev_y_fft + 0.5 * y_fft
 
@@ -157,6 +161,7 @@ class AudioVisualizer:
         self.set_plotdata('waveform', self.x, y)
         self.set_plotdata('spectrum', self.x_fft, y_fft)
 
+        # previous value updates
         self.prev_y = y
         self.prev_y_fft = y_fft
 
