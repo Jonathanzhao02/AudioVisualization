@@ -11,7 +11,8 @@ devices = [py_audio.get_device_info_by_index(i) for i in range(py_audio.get_devi
 
 FORMAT = pyaudio.paInt16
 CHANNELS = min(py_audio.get_default_input_device_info()['maxInputChannels'],
-               py_audio.get_default_output_device_info()['maxOutputChannels'])
+               py_audio.get_default_output_device_info()['maxOutputChannels'],
+               2)
 RATE = int(min(py_audio.get_default_input_device_info()['defaultSampleRate'],
                py_audio.get_default_output_device_info()['defaultSampleRate']))
 FRAMES_PER_BUFFER = 1024
