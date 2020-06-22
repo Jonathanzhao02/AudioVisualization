@@ -25,14 +25,14 @@ class AudioVisualizer:
         self.log_mode = log_mode
 
         self.fft_size = int(self.chunk_size / 2)
-        self.fft_size = 2 ** 10
+        self.fft_size = 2 ** 8
 
         self.max_freq = int(self.sample_rate / 2)
         self.min_freq = 0
 
         # x-axis data for plotting
-        self.x = np.arange(0, 2 * self.chunk_size, 2)
-        self.x_fft = np.linspace(0, self.max_freq, self.fft_size)
+        self.x = np.arange(0, 2 * self.chunk_size)
+        self.x_fft = np.linspace(0, self.max_freq, self.fft_size + 1)
 
         # sets up QtPy application + window
         pg.setConfigOptions(antialias=True)
@@ -41,83 +41,71 @@ class AudioVisualizer:
         self.win = pg.GraphicsWindow()
         self.win.setGeometry(5, 115, 1560, 1070)
 
-        # labels for plotting, currently unused to allow for auto-scaling
-        wf_xlabels = []
-
-        for i in range(0, 5):
-            wf_xlabels.append((self.chunk_size * i / 2, str(int(self.chunk_size * i / 2))))
-
-        wf_xaxis = pg.AxisItem(orientation='bottom')
-        wf_xaxis.setTicks([wf_xlabels])
-
-        wf_ylabels = [(-128, '-128'), (0, '0'), (128, '128')]
-        wf_yaxis = pg.AxisItem(orientation='left')
-        #wf_yaxis.setTicks([wf_ylabels])
-
-        if self.log_mode:
-            sp_xlabels = [
-                (np.log10(10), '10'), (np.log10(100), '100'),
-                (np.log10(1000), '1000'), (np.log10(self.sample_rate), str(self.sample_rate))
-            ]
-        else:
-            sp_xlabels = []
-            
-            for i in range(0, 5):
-                sp_xlabels.append((self.max_freq * i / 4, str(int(self.max_freq * i / 4))))
-
-        sp_xaxis = pg.AxisItem(orientation='bottom')
-        #sp_xaxis.setTicks([sp_xlabels])
-
         # creates both plots
         self.waveform = self.win.addPlot(
-            row=1, col=1, axisItems={'bottom': wf_xaxis, 'left': wf_yaxis}, title='Waveform',
+            row=1, col=1,
         )
 
         self.spectrum = self.win.addPlot(
-            row=2, col=1, axisItems={'bottom': sp_xaxis}, title='Frequency Spectrum',
+            row=1, col=1
         )
+
+        self.waveform.hideAxis('bottom')
+        self.waveform.hideAxis('left')
+        self.spectrum.hideAxis('bottom')
+        self.spectrum.hideAxis('left')
 
         # additional variables
         self.frames = []
         self.queue = Queue(-1)
+        self.prev_y_fft = None
+        self.prev_y = None
 
     def set_plotdata(self, name, data_x, data_y):
 
         # runs if data has been plotted before
         if name in self.traces:
             self.traces[name].setData(data_x, data_y)
-        
+
         # runs if data has not been plotted yet
         else:
 
             # sets up waveform plot
             if name == 'waveform':
-                self.traces[name] = self.waveform.plot(pen='c', width=3)
-                self.waveform.setYRange(-1, 1, padding=0)
-                self.waveform.setXRange(0, self.chunk_size, padding=0.005)
+                self.traces[name] = self.waveform.plot(pen='c', width=10)
+                self.waveform.setYRange(0, 1, padding=0)
+                self.waveform.setXRange(0, self.chunk_size * 2, padding=0.005)
 
             # sets up frequency spectrum plot
             if name == 'spectrum':
-                self.spectrum.setLogMode(x=self.log_mode,)
+                self.spectrum.setLogMode(x=self.log_mode, )
                 self.spectrum.setYRange(0, 1, padding=0)
 
                 if self.log_mode:
-                    self.traces[name] = self.spectrum.plot(pen='m', symbol='o')
+                    self.traces[name] = self.spectrum.plot(symbol='o')
                     self.spectrum.setXRange(
                         np.log10(20), np.log10(self.max_freq), padding=0.005)
                 else:
-                    self.traces[name] = self.spectrum.plot(pen='m', width=3)
+                    grad = QtGui.QLinearGradient(0, 0, 0, 1)
+                    grad.setColorAt(0, pg.mkColor('r'))
+                    grad.setColorAt(0.5, pg.mkColor('#ffa500'))
+                    grad.setColorAt(1, pg.mkColor('y'))
+                    grad.setCoordinateMode(QtGui.QGradient.ObjectMode)
+                    brush = QtGui.QBrush(grad)
+                    self.traces[name] = self.spectrum.plot(data_x, data_y, pen=None, width=10,
+                                                           fillLevel=0, fillBrush=brush,
+                                                           stepMode=True)
                     self.spectrum.setXRange(
                         20, self.max_freq, padding=0.005)
 
     # ripped and edited from Stack Overflow
     def decode(self, in_data, channels, format=np.int16):
         """
-        Convert a byte stream into a 2D numpy array with 
+        Convert a byte stream into a 2D numpy array with
         shape (chunk_size, channels)
 
-        Samples are interleaved, so for a stereo stream with left channel 
-        of [L0, L1, L2, ...] and right channel of [R0, R1, R2, ...], the output 
+        Samples are interleaved, so for a stereo stream with left channel
+        of [L0, L1, L2, ...] and right channel of [R0, R1, R2, ...], the output
         is ordered as [L0, R0, L1, R1, ...]
         """
 
@@ -145,6 +133,12 @@ class AudioVisualizer:
         # calculate waveform of data
         y = np.mean(data, axis=1)
         y = y / self.max_freq
+        y = (y + 1) / 2
+
+        y = np.concatenate((y, np.flipud(y)))
+
+        if self.prev_y is not None:
+            y = 0.5 * self.prev_y + 0.5 * y
 
         # apply blackman harris window to data
         window = blackmanharris(self.chunk_size)
@@ -156,24 +150,23 @@ class AudioVisualizer:
         y_fft = y_fft * 2 / (self.max_freq * 256)
         y_fft = y_fft ** 0.5
 
-        # fft validation testing with regular sine equations
-        """x = np.linspace(0, 1, self.chunk_size * 2)
-        y = 128 * np.sin(2 * np.pi * 440 * x) + 128 * np.sin(2 * np.pi * 10 * x)
-        x_fft = np.linspace(0, self.chunk_size, self.fft_size)
-        y_fft = np.abs(fft(y, self.fft_size * 2)[0:self.fft_size])
-        y_fft = y_fft * 2 / (256 * self.chunk_size)"""
+        if self.prev_y_fft is not None:
+            y_fft = 0.5 * self.prev_y_fft + 0.5 * y_fft
 
         # plot all data
         self.set_plotdata('waveform', self.x, y)
         self.set_plotdata('spectrum', self.x_fft, y_fft)
 
+        self.prev_y = y
+        self.prev_y_fft = y_fft
+
     def open_stream(self):
         # creates stream to computer's audio devices, aka audio I/O
         stream = self.PyAudio.open(format=self.format,
-                        channels=self.channels,
-                        rate=self.sample_rate,
-                        input=True,
-                        frames_per_buffer=self.chunk_size,)
+                                   channels=self.channels,
+                                   rate=self.sample_rate,
+                                   input=True,
+                                   frames_per_buffer=self.chunk_size, )
 
         # reads from stream and adds to queue until stopped
         while not self.event.is_set():
@@ -199,7 +192,7 @@ class AudioVisualizer:
         # runs the application if not already running
         if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
             QApplication.instance().exec_()
-        
+
         # stops input thread
         self.event.set()
 
