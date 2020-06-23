@@ -73,6 +73,7 @@ class AudioVisualizer:
         self.canvas = QtGui.QPixmap(self.width, self.height)
         self.label.setPixmap(self.canvas)
         self.win.setCentralWidget(self.label)
+        self.win.setWindowTitle("Spectrum")
 
         self.painter = None
         self.cpen = QtGui.QPen(QtCore.Qt.cyan)
@@ -143,11 +144,11 @@ class AudioVisualizer:
                       self.intermediate(val % 1, g3, g1, bound2, 1),\
                       self.intermediate(val % 1, b3, b1, bound2, 1)
 
-        color = QtGui.QColor(min(r + self.intermediate(lighten, 0, 255 - r, 0, 1), 255),
-                             min(g + self.intermediate(lighten, 0, 255 - g, 0, 1), 255),
-                             min(b + self.intermediate(lighten, 0, 255 - b, 0, 1), 255))
+        color = QtGui.QColor(min(r + self.intermediate(delta, 0, 255 - r, 0, 1), 255),
+                             min(g + self.intermediate(delta, 0, 255 - g, 0, 1), 255),
+                             min(b + self.intermediate(delta, 0, 255 - b, 0, 1), 255))
         pen = QtGui.QPen(color)
-        pen.setWidth(self.intermediate(lighten, 1, 3, 0, 1))
+        pen.setWidth(self.intermediate(delta, 1, 3, 0, 1))
         return pen
 
     def draw_data(self, y_fft, y, val=1):
