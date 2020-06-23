@@ -14,7 +14,7 @@ import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QApplication
 
-from scipy.signal.windows import blackmanharris
+from scipy.signal.windows import blackmanharris, tukey
 
 
 class Canvas(QtWidgets.QLabel):
@@ -61,7 +61,7 @@ class AudioVisualizer:
                  bass_frequency=160, low_frequency=0, high_frequency=20000,
                  wav_decay_speed=0.5, fft_decay_speed=0.5, bass_decay_speed=1,
                  wav_amp_factor=1, fft_amp_factor=0.7, bass_amp_factor=0.8,
-                 width=800, height=800):
+                 tukey_alpha=0.04, width=800, height=800):
         """
         Initializes necessary variables and the QApplication objects
 
@@ -107,6 +107,9 @@ class AudioVisualizer:
         :param bass_amp_factor: The exponent to apply to the bass visual effect (lower = more sensitive trigger)
         :type bass_amp_factor: float
 
+        :param tukey_alpha: The alpha of the tukey window applied to the fourier transform (higher = lower low Hz peaks)
+        :type tukey_alpha: float
+
         :param width: The initial width of the window
         :type width: int
 
@@ -126,6 +129,7 @@ class AudioVisualizer:
         self.wav_amp_factor = wav_amp_factor
         self.fft_amp_factor = fft_amp_factor
         self.bass_amp_factor = bass_amp_factor
+        self.tukey_alpha = tukey_alpha
 
         # calculating other important values
         self.fft_size = int(self.chunk_size / 2)
@@ -270,7 +274,7 @@ class AudioVisualizer:
         :param y_fft: The fourier transform data
         :type y_fft: numpy array
 
-        :param val: The amount to expand the ring
+        :param val: The amount to expand the ring [0, 1]
         :type val: float
         """
 
@@ -300,13 +304,17 @@ class AudioVisualizer:
         center_x = self.center_x + np.cos(angle) * (self.center_offset + offset)
         center_y = self.center_y + np.sin(angle) * (self.center_offset + offset)
 
+        # apply very slight tukey window to lower half of fft data
+        y_fft[0:int(len(y_fft) / 2)] *= tukey(len(y_fft), alpha=self.tukey_alpha)[0:int(len(y_fft) / 2)]
+
         rot_x = y_fft * np.cos(angle)
         rot_y = y_fft * np.sin(angle)
 
-        rot_x, rot_y = rot_x * (self.radius + offset), rot_y * (self.radius + offset)
+        rot_x = rot_x * (self.radius + offset)
+        rot_y = rot_y * (self.radius + offset)
 
-        rot_x *= 4 - val
-        rot_y *= 4 - val
+        rot_x *= 1 + val * 3
+        rot_y *= 1 + val * 3
 
         # draws the lines on to the QPixmap with a color gradient pen
         for i in np.arange(len(y_fft)):
