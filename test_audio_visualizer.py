@@ -1,5 +1,5 @@
 """
-Contains the AudioVisualizer object
+Contains the cooler AudioVisualizer object
 """
 
 import sys
@@ -11,7 +11,7 @@ import pyaudio
 import numpy as np
 
 import pyqtgraph as pg
-from pyqtgraph.Qt import QtCore, QtGui
+from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QApplication
 
 from scipy.signal.windows import blackmanharris
@@ -25,7 +25,8 @@ class AudioVisualizer:
 
     def __init__(self, py_audio, data_format=pyaudio.paInt16,
                  channels=1, sample_rate=48000, chunk_size=1024,
-                 log_mode=False, decay_speed=0.5):
+                 log_mode=False, decay_speed=0.5,
+                 width=800, height=800):
         # setting object variables
         self.py_audio = py_audio
         self.data_format = data_format
@@ -36,41 +37,32 @@ class AudioVisualizer:
         self.decay_speed = decay_speed
 
         self.fft_size = int(self.chunk_size / 2)
-        #self.fft_size = 2 ** 8
 
         self.max_freq = int(self.sample_rate / 2)
         self.min_freq = 0
 
-        # x-axis data for plotting
-        self.x_wav = np.arange(0, 2 * self.chunk_size)
-
-        # log mode does not support step mode, so x-axis must be shortened
-        if self.log_mode:
-            self.x_fft = np.linspace(0, self.max_freq, self.fft_size)
-        else:
-            self.x_fft = np.linspace(0, self.max_freq, self.fft_size + 1)
-
-        # sets up QtPy application + window
+        # sets up QtPy application
         pg.setConfigOptions(antialias=True)
         self.traces = dict()
         self.app = QApplication(sys.argv)
-        self.win = pg.GraphicsWindow()
-        self.win.setGeometry(5, 115, 1560, 1070)
+        self.win = QtWidgets.QMainWindow()
 
-        # creates both plots
-        self.waveform = self.win.addPlot(
-            row=1, col=1,
-        )
+        self.width = width
+        self.height = height
 
-        self.spectrum = self.win.addPlot(
-            row=1, col=1
-        )
+        self.label = QtWidgets.QLabel()
+        self.canvas = QtGui.QPixmap(self.width, self.height)
+        self.label.setPixmap(self.canvas)
+        self.win.setCentralWidget(self.label)
 
-        # hides plot axes
-        self.waveform.hideAxis('bottom')
-        self.waveform.hideAxis('left')
-        self.spectrum.hideAxis('bottom')
-        self.spectrum.hideAxis('left')
+        self.painter = None
+        self.cpen = pg.mkPen('c')
+        self.black = pg.mkColor('#000000')
+
+        self.center_x = self.width / 2
+        self.center_y = self.height / 2
+        self.center_offset = min(self.width, self.height) / 4
+        self.radius = min(self.width, self.height) / 4
 
         # additional variables
         self.frames = []
@@ -80,54 +72,49 @@ class AudioVisualizer:
         self.prev_y_fft = None
         self.prev_y_wav = None
 
-    def set_plotdata(self, name, data_x, data_y):
+    def draw_data(self, y_fft, y):
         """
-        Overwrites data on specified plot with new data
-
-        :param name: The name of the plot to be written to
-        :type name: str
-
-        :param data_x: The x component of the data
-        :type data_x: numpy array
+        Draws data onto canvas
 
         :param data_y: The y component of the data
         :type data_y: numpy array
         """
+        self.painter = QtGui.QPainter(self.label.pixmap())
+        self.painter.fillRect(0, 0, self.width, self.height, self.black)
 
-        # runs if data has been plotted before
-        if name in self.traces:
-            self.traces[name].setData(data_x, data_y)
+        self.painter.setPen(self.cpen)
 
-        # runs if data has not been plotted yet
-        else:
+        angle = np.linspace(-np.pi * 3 / 2, np.pi / 2, len(y_fft)) * -1
 
-            # sets up waveform plot
-            if name == 'waveform':
-                self.traces[name] = self.waveform.plot(pen='c')
-                self.waveform.setYRange(0, 1, padding=0)
-                self.waveform.setXRange(0, self.chunk_size * 2, padding=0.005)
+        center_x = self.center_x + np.cos(angle) * self.center_offset
+        center_y = self.center_y + np.sin(angle) * self.center_offset
 
-            # sets up frequency spectrum plot
-            if name == 'spectrum':
-                self.spectrum.setLogMode(x=self.log_mode, )
-                self.spectrum.setYRange(0, 1, padding=0)
+        rot_x = y_fft * np.cos(angle)
+        rot_y = y_fft * np.sin(angle)
 
-                if self.log_mode:
-                    self.traces[name] = self.spectrum.plot(symbol='o')
-                    self.spectrum.setXRange(
-                        np.log10(20), np.log10(self.max_freq), padding=0.005)
-                else:
-                    grad = QtGui.QLinearGradient(0, 0, 0, 1)
-                    grad.setColorAt(0, pg.mkColor('r'))
-                    grad.setColorAt(0.5, pg.mkColor('#ffa500'))
-                    grad.setColorAt(1, pg.mkColor('y'))
-                    grad.setCoordinateMode(QtGui.QGradient.ObjectMode)
-                    brush = QtGui.QBrush(grad)
-                    self.traces[name] = self.spectrum.plot(data_x, data_y, pen=None,
-                                                           fillLevel=0, fillBrush=brush,
-                                                           stepMode=True)
-                    self.spectrum.setXRange(
-                        20, self.max_freq, padding=0.005)
+        rot_x, rot_y = rot_x * self.radius, rot_y * self.radius
+
+        lines = []
+
+        for i in np.arange(len(y_fft)):
+            lines.append(QtCore.QLineF(int(center_x[i]), int(center_y[i]),
+                                      int(center_x[i] + rot_x[i]), int(center_y[i] + rot_y[i])))
+
+        self.painter.drawLines(lines)
+
+        x_vals = np.linspace(0, self.width, self.chunk_size * 2)
+        y_vals = y * self.center_y + self.center_y
+
+        points = QtGui.QPolygonF()
+
+        for i in np.arange(self.chunk_size * 2):
+            points.append(QtCore.QPointF(int(x_vals[i]), int(y_vals[i])))
+
+        self.painter.drawPoints(points)
+
+        self.painter.end()
+        self.win.update()
+
 
     # ripped and edited from Stack Overflow
     def decode(self, in_data, channels, data_format=np.int16):
@@ -169,7 +156,6 @@ class AudioVisualizer:
         # calculate waveform of data
         y_wav = np.mean(data, axis=1)
         y_wav = y_wav / self.max_freq   # shifts y_wav to [-1, 1]
-        y_wav = (y_wav + 1) / 2         # shifts y_wav to [0, 1]
 
         # smooths waveform values to be more easy on the eyes
         if self.prev_y_wav is not None:
@@ -192,9 +178,8 @@ class AudioVisualizer:
         if self.prev_y_fft is not None:
             y_fft = (1 - self.decay_speed) * self.prev_y_fft + self.decay_speed * y_fft
 
-        # plot all data
-        self.set_plotdata('waveform', self.x_wav, new_y)
-        self.set_plotdata('spectrum', self.x_fft, y_fft)
+        # draw data
+        self.draw_data(y_fft, new_y)
 
         # previous value updates
         self.prev_y_wav = y_wav
@@ -227,6 +212,7 @@ class AudioVisualizer:
         """
         Executes the application and stream I/O thread
         """
+        self.win.show()
 
         # creates PyQt timer to automatically update the graph every 20ms
         timer = QtCore.QTimer()
@@ -243,11 +229,4 @@ class AudioVisualizer:
 
         # stops input thread
         self.event.set()
-
-        # writes recorded audio to file
-        #wf = wave.open("louden.wav", 'wb')
-        #wf.setnchannels(self.channels)
-        #wf.setsampwidth(self.py_audio.get_sample_size(self.format))
-        #wf.setframerate(self.sample_rate)
-        #wf.writeframes(b''.join(self.frames))
-        #wf.close()
+        self.painter.end()
