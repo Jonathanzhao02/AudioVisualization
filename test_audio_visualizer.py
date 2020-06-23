@@ -100,6 +100,15 @@ class AudioVisualizer:
         self.prev_bass = None
 
     def set_dims(self, width, height):
+        """
+        Sets the dimensions of the visualizer and recalculates necessary dimensions
+
+        :param width: New width of window
+        :type width: int
+
+        :param height: New height of window
+        :type height: int
+        """
         self.width = width
         self.height = height
 
