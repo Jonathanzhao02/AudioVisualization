@@ -3,6 +3,7 @@ Contains the cooler AudioVisualizer object
 """
 
 import sys
+import time
 
 from queue import Queue
 from threading import Thread, Event
@@ -58,8 +59,8 @@ class AudioVisualizer:
 
     def __init__(self, py_audio, data_format=pyaudio.paInt16,
                  channels=1, sample_rate=48000, chunk_size=1024,
-                 bass_frequency=160, low_frequency=0, high_frequency=20000,
-                 wav_decay_speed=0.5, fft_decay_speed=0.5, bass_decay_speed=1,
+                 bass_frequency=260, low_frequency=0, high_frequency=20000,
+                 wav_decay_speed=0.5, fft_decay_speed=0.5, bass_decay_speed=0.8,
                  wav_amp_factor=1, fft_amp_factor=0.7, bass_amp_factor=0.8,
                  tukey_alpha=0.04, width=800, height=800):
         """
@@ -180,6 +181,9 @@ class AudioVisualizer:
         self.prev_y_wav = None
         self.prev_bass = None
 
+        self.frame_count = 0
+        self.start_time = time.time()
+
     def set_dims(self, width, height):
         """
         Sets the dimensions of the visualizer and recalculates necessary dimensions
@@ -201,7 +205,7 @@ class AudioVisualizer:
         self.max_offset = self.radius / 4
 
     @staticmethod
-    def intermediate(val, low, high, val_low, val_high):
+    def intermediate(val, low, high, val_low=0, val_high=1):
         """"
         Maps a value to another range
 
@@ -221,6 +225,12 @@ class AudioVisualizer:
         :type val_high: float
         """
 
+        if low == high:
+            return high
+
+        if val_low == val_high:
+            return high
+
         return (val - val_low) / (val_high - val_low) * (high - low) + low
 
     def get_gradient_pen(self, val, delta):
@@ -234,34 +244,31 @@ class AudioVisualizer:
         :type val: float
         """
 
-        r1, g1, b1 = 254, 254, 0
-
-        r2, g2, b2 = 102, 225, 250
-
-        r3, g3, b3 = 254, 0, 157
-
         bound1 = 1/2
-
         bound2 = 9/11
 
-        if val < bound1:
-            r, g, b = self.intermediate(val % 1, r1, r2, 0, bound1),\
-                      self.intermediate(val % 1, g1, g2, 0, bound1),\
-                      self.intermediate(val % 1, b1, b2, 0, bound1)
-        elif val < bound2:
-            r, g, b = self.intermediate(val % 1, r2, r3, bound1, bound2),\
-                      self.intermediate(val % 1, g2, g3, bound1, bound2),\
-                      self.intermediate(val % 1, b2, b3, bound1, bound2)
-        else:
-            r, g, b = self.intermediate(val % 1, r3, r1, bound2, 1),\
-                      self.intermediate(val % 1, g3, g1, bound2, 1),\
-                      self.intermediate(val % 1, b3, b1, bound2, 1)
+        r1, g1, b1 = 255, 255, 0
+        r2, g2, b2 = 102, 225, 250
+        r3, g3, b3 = 255, 0, 157
 
-        color = QtGui.QColor(int(min(r + self.intermediate(delta, 0, 255 - r, 0, 1), 255)),
-                             int(min(g + self.intermediate(delta, 0, 255 - g, 0, 1), 255)),
-                             int(min(b + self.intermediate(delta, 0, 255 - b, 0, 1), 255)))
+        if val < bound1:
+            r, g, b = self.intermediate(val, r1, r2, 0, bound1), \
+                      self.intermediate(val, g1, g2, 0, bound1), \
+                      self.intermediate(val, b1, b2, 0, bound1)
+        elif val < bound2:
+            r, g, b = self.intermediate(val, r2, r3, bound1, bound2), \
+                      self.intermediate(val, g2, g3, bound1, bound2), \
+                      self.intermediate(val, b2, b3, bound1, bound2)
+        else:
+            r, g, b = self.intermediate(val, r3, r1, bound2, 1), \
+                      self.intermediate(val, g3, g1, bound2, 1), \
+                      self.intermediate(val, b3, b1, bound2, 1)
+
+        color = QtGui.QColor(int(min(r + self.intermediate(delta, 0, 255 - r), 255)),
+                             int(min(g + self.intermediate(delta, 0, 255 - g), 255)),
+                             int(min(b + self.intermediate(delta, 0, 255 - b), 255)))
         pen = QtGui.QPen(color)
-        pen.setWidth(int(self.intermediate(delta, 1, 3, 0, 1)))
+        pen.setWidth(int(self.intermediate(delta, 1, 3)))
         return pen
 
     def draw_data(self, y, y_fft, val=1):
@@ -407,6 +414,8 @@ class AudioVisualizer:
         self.prev_y_fft = y_fft
         self.prev_bass = bass
 
+        self.frame_count += 1
+
     def open_stream(self):
         """
         Opens a stream from the py_audio instance and
@@ -456,4 +465,5 @@ class AudioVisualizer:
 
         # stops input thread
         self.event.set()
-        self.painter.end()
+
+        print("FPS", self.frame_count / (time.time() - self.start_time))
