@@ -16,12 +16,10 @@ CHANNELS = min(py_audio.get_default_input_device_info()['maxInputChannels'],
 RATE = int(min(py_audio.get_default_input_device_info()['defaultSampleRate'],
                py_audio.get_default_output_device_info()['defaultSampleRate']))
 FRAMES_PER_BUFFER = 1024
-LOG_MODE = False
 
 visualizer = AudioVisualizer(py_audio=py_audio,
                              data_format=FORMAT,
                              channels=CHANNELS,
                              sample_rate=RATE,
-                             chunk_size=FRAMES_PER_BUFFER,
-                             log_mode=LOG_MODE,)
+                             chunk_size=FRAMES_PER_BUFFER,)
 visualizer.start()

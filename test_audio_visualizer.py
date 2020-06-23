@@ -18,11 +18,32 @@ from scipy.signal.windows import blackmanharris
 
 
 class Canvas(QtWidgets.QLabel):
+    """
+    Overrides the resizeEvent method of a QLabel
+    to allow for QPixmap auto-scaling
+    """
+
     def __init__(self, visualizer):
+        """
+        Keeps a reference to the AudioVisualizer object
+        before calling the parent QLabel __init__ method
+
+        :param visualizer: The corresponding AudioVisualizer
+        :type visualizer: AudioVisualizer
+        """
+
         self.visualizer = visualizer
         QtWidgets.QLabel.__init__(self)
 
     def resizeEvent(self, event):
+        """
+        Override of the resizeEvent method that also updates
+        the QLabel QPixmap and visualizer object dimensions
+
+        :param event: The resize event
+        :type event: QEvent
+        """
+
         pixmap = self.pixmap()
         self.setPixmap(pixmap.scaled(self.width(), self.height(), aspectRatioMode=QtCore.Qt.IgnoreAspectRatio))
         self.visualizer.set_dims(self.width(), self.height())
@@ -37,15 +58,57 @@ class AudioVisualizer:
     def __init__(self, py_audio, data_format=pyaudio.paInt16,
                  channels=1, sample_rate=48000, chunk_size=1024,
                  bass_frequency=160, low_frequency=0, high_frequency=20000,
-                 log_mode=False, wav_decay_speed=0.5, fft_decay_speed=0.5, bass_decay_speed=1,
+                 wav_decay_speed=0.5, fft_decay_speed=0.5, bass_decay_speed=1,
                  width=800, height=800):
+        """
+        Initializes necessary variables and the QApplication objects
+
+        :param py_audio: The PyAudio instance to be used
+        :type py_audio: PyAudio
+
+        :param data_format: The format of the PyAudio stream data
+        :type data_format: int
+
+        :param channels: The number of channels in the audio stream
+        :type channels: int
+
+        :param sample_rate: The sample rate of the audio stream
+        :type sample_rate: int
+
+        :param chunk_size: The number of bytes per audio stream read
+        :type chunk_size: int
+
+        :param bass_frequency: The estimated bass frequency of the audio
+        :type bass_frequency: int
+
+        :param low_frequency: The lowest frequency to display
+        :type low_frequency: int
+
+        :param high_frequency: The highest frequency to display
+        :type high_frequency: int
+
+        :param wav_decay_speed: The rate at which the waveform should decay
+        :type wav_decay_speed: float
+
+        :param fft_decay_speed: The rate at which the fourier transform should decay
+        :type fft_decay_speed: float
+
+        :param bass_decay_speed: The rate at which the bass effect should decay
+        :type bass_decay_speed: float
+
+        :param width: The initial width of the window
+        :type width: int
+
+        :param height: The initial height of the window
+        :type height: int
+        """
+
         # setting object variables
         self.py_audio = py_audio
         self.data_format = data_format
         self.channels = channels
         self.sample_rate = sample_rate
         self.chunk_size = chunk_size
-        self.log_mode = log_mode
         self.wav_decay_speed = wav_decay_speed
         self.fft_decay_speed = fft_decay_speed
         self.bass_decay_speed = bass_decay_speed
@@ -109,6 +172,7 @@ class AudioVisualizer:
         :param height: New height of window
         :type height: int
         """
+
         self.width = width
         self.height = height
 
@@ -138,6 +202,7 @@ class AudioVisualizer:
         :param val_high: The high limit of the value range
         :type val_high: float
         """
+
         return (val - val_low) / (val_high - val_low) * (high - low) + low
 
     def get_gradient_pen(self, val, delta):
@@ -150,6 +215,7 @@ class AudioVisualizer:
         :param delta: The alpha of the color and relative width of the pen
         :type val: float
         """
+
         r1, g1, b1 = 254, 254, 0
 
         r2, g2, b2 = 102, 225, 250
@@ -173,11 +239,11 @@ class AudioVisualizer:
                       self.intermediate(val % 1, g3, g1, bound2, 1),\
                       self.intermediate(val % 1, b3, b1, bound2, 1)
 
-        color = QtGui.QColor(min(r + self.intermediate(delta, 0, 255 - r, 0, 1), 255),
-                             min(g + self.intermediate(delta, 0, 255 - g, 0, 1), 255),
-                             min(b + self.intermediate(delta, 0, 255 - b, 0, 1), 255))
+        color = QtGui.QColor(int(min(r + self.intermediate(delta, 0, 255 - r, 0, 1), 255)),
+                             int(min(g + self.intermediate(delta, 0, 255 - g, 0, 1), 255)),
+                             int(min(b + self.intermediate(delta, 0, 255 - b, 0, 1), 255)))
         pen = QtGui.QPen(color)
-        pen.setWidth(self.intermediate(delta, 1, 3, 0, 1))
+        pen.setWidth(int(self.intermediate(delta, 1, 3, 0, 1)))
         return pen
 
     def draw_data(self, y_fft, y, val=1):
@@ -193,6 +259,7 @@ class AudioVisualizer:
         :param val: The amount to expand the ring
         :type val: float
         """
+
         self.painter = QtGui.QPainter(self.label.pixmap())
         self.painter.fillRect(0, 0, self.width, self.height, QtCore.Qt.black)
 
@@ -336,8 +403,9 @@ class AudioVisualizer:
 
     def start(self):
         """
-        Executes the application and stream I/O thread
+        Executes the QApplication and PyAudio stream thread
         """
+
         self.win.show()
 
         # creates PyQt timer to automatically update the graph every 20ms
