@@ -260,15 +260,15 @@ class AudioVisualizer:
         pen.setWidth(int(self.intermediate(delta, 1, 3, 0, 1)))
         return pen
 
-    def draw_data(self, y_fft, y, val=1):
+    def draw_data(self, y, y_fft, val=1):
         """
         Draws data onto the QLabel
 
-        :param y_fft: The fourier transform data
-        :type y_fft: numpy array
-
         :param y: The waveform data
         :type y: numpy array
+
+        :param y_fft: The fourier transform data
+        :type y_fft: numpy array
 
         :param val: The amount to expand the ring
         :type val: float
@@ -277,6 +277,20 @@ class AudioVisualizer:
         # clears screen
         self.painter = QtGui.QPainter(self.label.pixmap())
         self.painter.fillRect(0, 0, self.width, self.height, QtCore.Qt.black)
+
+        # calculates the waveform coordinates
+        x_vals = np.linspace(0, self.width, self.chunk_size * 2)
+        y_vals = y * self.center_y + self.center_y
+
+        # creates points to be drawn
+        points = QtGui.QPolygonF()
+
+        for i in np.arange(self.chunk_size * 2):
+            points.append(QtCore.QPointF(int(x_vals[i]), int(y_vals[i])))
+
+        # draws the points on to the QPixmap with a cyan pen
+        self.painter.setPen(self.cpen)
+        self.painter.drawPoints(points)
 
         # calculates coordinates for the frequency spectrum circle
         offset = self.max_offset * val
@@ -302,20 +316,6 @@ class AudioVisualizer:
                                   int(center_y[i]),
                                   int(center_x[i] + rot_x[i]),
                                   int(center_y[i] + rot_y[i])))
-
-        # calculates the waveform coordinates
-        x_vals = np.linspace(0, self.width, self.chunk_size * 2)
-        y_vals = y * self.center_y + self.center_y
-
-        # creates points to be drawn
-        points = QtGui.QPolygonF()
-
-        for i in np.arange(self.chunk_size * 2):
-            points.append(QtCore.QPointF(int(x_vals[i]), int(y_vals[i])))
-
-        # draws the points on to the QPixmap with a cyan pen
-        self.painter.setPen(self.cpen)
-        self.painter.drawPoints(points)
 
         # updates the window graphics
         self.painter.end()
@@ -390,8 +390,8 @@ class AudioVisualizer:
             y_fft = (1 - self.fft_decay_speed) * self.prev_y_fft + self.fft_decay_speed * y_fft
 
         # draws data
-        self.draw_data(y_fft[self.low_index:self.high_index] ** self.fft_amp_factor,
-                       new_y ** self.wav_amp_factor,
+        self.draw_data(new_y ** self.wav_amp_factor,
+                       y_fft[self.low_index:self.high_index] ** self.fft_amp_factor,
                        bass ** self.bass_amp_factor)
 
         # previous value updates
