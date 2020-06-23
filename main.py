@@ -4,7 +4,7 @@ Sets up and executes an instance of an AudioVisualizer object using computer aud
 
 import pyaudio
 
-from test_audio_visualizer import AudioVisualizer
+from audio_visualizer import AudioVisualizer
 
 py_audio = pyaudio.PyAudio()
 devices = [py_audio.get_device_info_by_index(i) for i in range(py_audio.get_device_count())]
