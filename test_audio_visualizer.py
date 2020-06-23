@@ -17,6 +17,17 @@ from PyQt5.QtWidgets import QApplication
 from scipy.signal.windows import blackmanharris
 
 
+class Canvas(QtWidgets.QLabel):
+    def __init__(self, visualizer):
+        self.visualizer = visualizer
+        QtWidgets.QLabel.__init__(self)
+
+    def resizeEvent(self, event):
+        pixmap = self.pixmap()
+        self.setPixmap(pixmap.scaled(self.width(), self.height(), aspectRatioMode=QtCore.Qt.IgnoreAspectRatio))
+        self.visualizer.set_dims(self.width(), self.height())
+        QtWidgets.QLabel.resizeEvent(self, event)
+
 class AudioVisualizer:
     """
     Takes a py_audio instance to create an audio stream
@@ -69,16 +80,15 @@ class AudioVisualizer:
         self.max_offset = self.radius / 4
 
         # QtPy graphic objects
-        self.label = QtWidgets.QLabel()
+        self.label = Canvas(self)
+        self.label.setMinimumSize(100, 100)
         self.canvas = QtGui.QPixmap(self.width, self.height)
         self.label.setPixmap(self.canvas)
         self.win.setCentralWidget(self.label)
         self.win.setWindowTitle("Spectrum")
 
         self.painter = None
-        self.cpen = QtGui.QPen(QtCore.Qt.cyan)
-        self.gpen = QtGui.QPen()
-        self.black = pg.mkColor('#000000')
+        self.cpen = pg.mkPen('c')
 
         # additional variables
         self.frames = []
@@ -88,6 +98,16 @@ class AudioVisualizer:
         self.prev_y_fft = None
         self.prev_y_wav = None
         self.prev_bass = None
+
+    def set_dims(self, width, height):
+        self.width = width
+        self.height = height
+
+        self.center_x = self.width / 2
+        self.center_y = self.height / 2
+        self.center_offset = min(self.width, self.height) / 4
+        self.radius = min(self.width, self.height) / 4
+        self.max_offset = self.radius / 4
 
     @staticmethod
     def intermediate(val, low, high, val_low, val_high):
@@ -165,7 +185,7 @@ class AudioVisualizer:
         :type val: float
         """
         self.painter = QtGui.QPainter(self.label.pixmap())
-        self.painter.fillRect(0, 0, self.width, self.height, self.black)
+        self.painter.fillRect(0, 0, self.width, self.height, QtCore.Qt.black)
 
         offset = self.max_offset * val
 
@@ -271,7 +291,7 @@ class AudioVisualizer:
             bass = (1 - self.bass_decay_speed) * self.prev_bass + self.bass_decay_speed * bass
 
         # draws data
-        self.draw_data(y_fft[self.low_index:self.high_index], new_y, bass ** 2)
+        self.draw_data(y_fft[self.low_index:self.high_index], new_y, bass)
 
         # previous value updates
         self.prev_y_wav = y_wav

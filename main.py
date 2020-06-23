@@ -23,5 +23,5 @@ visualizer = AudioVisualizer(py_audio=py_audio,
                              channels=CHANNELS,
                              sample_rate=RATE,
                              chunk_size=FRAMES_PER_BUFFER,
-                             log_mode=LOG_MODE)
+                             log_mode=LOG_MODE,)
 visualizer.start()
