@@ -78,7 +78,7 @@ class AudioVisualizer:
         :param chunk_size: The number of bytes per audio stream read
         :type chunk_size: int
 
-        :param bass_frequency: The estimated bass frequency of the audio
+        :param bass_frequency: The estimated bass frequency of the audio to use for the bass visual effect
         :type bass_frequency: int
 
         :param low_frequency: The lowest frequency to display
@@ -93,7 +93,7 @@ class AudioVisualizer:
         :param fft_decay_speed: The rate at which the fourier transform should decay
         :type fft_decay_speed: float
 
-        :param bass_decay_speed: The rate at which the bass effect should decay
+        :param bass_decay_speed: The rate at which the bass visual effect should decay
         :type bass_decay_speed: float
 
         :param width: The initial width of the window
