@@ -49,6 +49,7 @@ class Canvas(QtWidgets.QLabel):
         self.visualizer.set_dims(self.width(), self.height())
         QtWidgets.QLabel.resizeEvent(self, event)
 
+
 class AudioVisualizer:
     """
     Takes a py_audio instance to create an audio stream
@@ -59,6 +60,7 @@ class AudioVisualizer:
                  channels=1, sample_rate=48000, chunk_size=1024,
                  bass_frequency=160, low_frequency=0, high_frequency=20000,
                  wav_decay_speed=0.5, fft_decay_speed=0.5, bass_decay_speed=1,
+                 wav_amp_factor=1, fft_amp_factor=0.7, bass_amp_factor=0.8,
                  width=800, height=800):
         """
         Initializes necessary variables and the QApplication objects
@@ -96,6 +98,15 @@ class AudioVisualizer:
         :param bass_decay_speed: The rate at which the bass visual effect should decay
         :type bass_decay_speed: float
 
+        :param wav_amp_factor: The exponent to apply to the waveform (lower = higher amplitude)
+        :type wav_amp_factor: float
+
+        :param fft_amp_factor: The exponent to apply to the fourier transform (lower = higher peaks)
+        :type fft_amp_factor: float
+
+        :param bass_amp_factor: The exponent to apply to the bass visual effect (lower = more sensitive trigger)
+        :type bass_amp_factor: float
+
         :param width: The initial width of the window
         :type width: int
 
@@ -112,6 +123,9 @@ class AudioVisualizer:
         self.wav_decay_speed = wav_decay_speed
         self.fft_decay_speed = fft_decay_speed
         self.bass_decay_speed = bass_decay_speed
+        self.wav_amp_factor = wav_amp_factor
+        self.fft_amp_factor = fft_amp_factor
+        self.bass_amp_factor = bass_amp_factor
 
         # calculating other important values
         self.fft_size = int(self.chunk_size / 2)
@@ -248,7 +262,7 @@ class AudioVisualizer:
 
     def draw_data(self, y_fft, y, val=1):
         """
-        Draws data onto canvas
+        Draws data onto the QLabel
 
         :param y_fft: The fourier transform data
         :type y_fft: numpy array
@@ -260,9 +274,11 @@ class AudioVisualizer:
         :type val: float
         """
 
+        # clears screen
         self.painter = QtGui.QPainter(self.label.pixmap())
         self.painter.fillRect(0, 0, self.width, self.height, QtCore.Qt.black)
 
+        # calculates coordinates for the frequency spectrum circle
         offset = self.max_offset * val
 
         angle = np.linspace(-np.pi * 3 / 2, np.pi / 2, len(y_fft)) * -1
@@ -278,28 +294,36 @@ class AudioVisualizer:
         rot_x *= 4 - val
         rot_y *= 4 - val
 
+        # draws the lines on to the QPixmap with a color gradient pen
         for i in np.arange(len(y_fft)):
             self.painter.setPen(self.get_gradient_pen(i / len(y_fft), val))
-            self.painter.drawLine(QtCore.QLineF(int(center_x[i]), int(center_y[i]),
-                                      int(center_x[i] + rot_x[i]), int(center_y[i] + rot_y[i])))
+            self.painter.drawLine(QtCore.QLineF(
+                                  int(center_x[i]),
+                                  int(center_y[i]),
+                                  int(center_x[i] + rot_x[i]),
+                                  int(center_y[i] + rot_y[i])))
 
+        # calculates the waveform coordinates
         x_vals = np.linspace(0, self.width, self.chunk_size * 2)
         y_vals = y * self.center_y + self.center_y
 
+        # creates points to be drawn
         points = QtGui.QPolygonF()
 
         for i in np.arange(self.chunk_size * 2):
             points.append(QtCore.QPointF(int(x_vals[i]), int(y_vals[i])))
 
+        # draws the points on to the QPixmap with a cyan pen
         self.painter.setPen(self.cpen)
         self.painter.drawPoints(points)
 
+        # updates the window graphics
         self.painter.end()
         self.win.update()
 
-
     # ripped and edited from Stack Overflow
-    def decode(self, in_data, channels, data_format=np.int16):
+    @staticmethod
+    def decode(in_data, channels, data_format=np.int16):
         """
         Convert a byte stream into a 2D numpy array with
         shape (chunk_size, channels)
@@ -353,11 +377,6 @@ class AudioVisualizer:
         y_fft = np.abs(np.fft.rfft(data, n=self.fft_size * 2))
         y_fft = np.delete(y_fft, len(y_fft) - 1)
         y_fft = y_fft * 2 / (self.max_freq * 256)   # shifts y_fft to [0, 1]
-        y_fft = y_fft ** 0.7                        # emphasizes smaller peaks
-
-        # smooths frequency spectrum values to be more easy on the eyes
-        if self.prev_y_fft is not None:
-            y_fft = (1 - self.fft_decay_speed) * self.prev_y_fft + self.fft_decay_speed * y_fft
 
         # calculates average values of bass frequencies
         bass = np.mean(y_fft[0:int(self.bass_index)])
@@ -366,8 +385,14 @@ class AudioVisualizer:
         if self.prev_bass is not None:
             bass = (1 - self.bass_decay_speed) * self.prev_bass + self.bass_decay_speed * bass
 
+        # smooths frequency spectrum values to be more easy on the eyes
+        if self.prev_y_fft is not None:
+            y_fft = (1 - self.fft_decay_speed) * self.prev_y_fft + self.fft_decay_speed * y_fft
+
         # draws data
-        self.draw_data(y_fft[self.low_index:self.high_index], new_y, bass)
+        self.draw_data(y_fft[self.low_index:self.high_index] ** self.fft_amp_factor,
+                       new_y ** self.wav_amp_factor,
+                       bass ** self.bass_amp_factor)
 
         # previous value updates
         self.prev_y_wav = y_wav
