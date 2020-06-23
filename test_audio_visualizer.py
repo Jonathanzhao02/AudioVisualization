@@ -20,12 +20,13 @@ from scipy.signal.windows import blackmanharris
 class AudioVisualizer:
     """
     Takes a py_audio instance to create an audio stream
-    and plot the audio's waveform and frequency spectrum
+    and draw the audio's waveform and frequency spectrum
     """
 
     def __init__(self, py_audio, data_format=pyaudio.paInt16,
                  channels=1, sample_rate=48000, chunk_size=1024,
-                 log_mode=False, decay_speed=0.5,
+                 bass_frequency=160, low_frequency=0, high_frequency=20000,
+                 log_mode=False, wav_decay_speed=0.5, fft_decay_speed=0.5, bass_decay_speed=1,
                  width=800, height=800):
         # setting object variables
         self.py_audio = py_audio
@@ -34,12 +35,22 @@ class AudioVisualizer:
         self.sample_rate = sample_rate
         self.chunk_size = chunk_size
         self.log_mode = log_mode
-        self.decay_speed = decay_speed
+        self.wav_decay_speed = wav_decay_speed
+        self.fft_decay_speed = fft_decay_speed
+        self.bass_decay_speed = bass_decay_speed
 
+        # calculating other important values
         self.fft_size = int(self.chunk_size / 2)
 
         self.max_freq = int(self.sample_rate / 2)
         self.min_freq = 0
+
+        if self.max_freq < high_frequency:
+            high_frequency = self.max_freq
+
+        self.bass_index = int(bass_frequency / self.max_freq * self.fft_size)
+        self.low_index = int(low_frequency / self.max_freq * self.fft_size)
+        self.high_index = int(high_frequency / self.max_freq * self.fft_size)
 
         # sets up QtPy application
         pg.setConfigOptions(antialias=True)
@@ -47,22 +58,26 @@ class AudioVisualizer:
         self.app = QApplication(sys.argv)
         self.win = QtWidgets.QMainWindow()
 
+        # dimension-related variables
         self.width = width
         self.height = height
 
+        self.center_x = self.width / 2
+        self.center_y = self.height / 2
+        self.center_offset = min(self.width, self.height) / 4
+        self.radius = min(self.width, self.height) / 4
+        self.max_offset = self.radius / 4
+
+        # QtPy graphic objects
         self.label = QtWidgets.QLabel()
         self.canvas = QtGui.QPixmap(self.width, self.height)
         self.label.setPixmap(self.canvas)
         self.win.setCentralWidget(self.label)
 
         self.painter = None
-        self.cpen = pg.mkPen('c')
+        self.cpen = QtGui.QPen(QtCore.Qt.cyan)
+        self.gpen = QtGui.QPen()
         self.black = pg.mkColor('#000000')
-
-        self.center_x = self.width / 2
-        self.center_y = self.height / 2
-        self.center_offset = min(self.width, self.height) / 4
-        self.radius = min(self.width, self.height) / 4
 
         # additional variables
         self.frames = []
@@ -71,36 +86,105 @@ class AudioVisualizer:
 
         self.prev_y_fft = None
         self.prev_y_wav = None
+        self.prev_bass = None
 
-    def draw_data(self, y_fft, y):
+    @staticmethod
+    def intermediate(val, low, high, val_low, val_high):
+        """"
+        Maps a value to another range
+
+        :param val: The value to be mapped
+        :type val: float
+
+        :param low: The low limit of the map range
+        :type low: float
+
+        :param high: The high limit of the map range
+        :type high: float
+
+        :param val_low: The low limit of the value range
+        :type val_low: float
+
+        :param val_high: The high limit of the value range
+        :type val_high: float
+        """
+        return (val - val_low) / (val_high - val_low) * (high - low) + low
+
+    def get_gradient_pen(self, val, delta):
+        """
+        Returns a pen containing a color from the gradient
+
+        :param val: The intermediate value on the gradient [0, 1]
+        :type val: float
+
+        :param delta: The alpha of the color and relative width of the pen
+        :type val: float
+        """
+        r1, g1, b1 = 254, 254, 0
+
+        r2, g2, b2 = 102, 225, 250
+
+        r3, g3, b3 = 254, 0, 157
+
+        bound1 = 1/2
+
+        bound2 = 9/11
+
+        if val < bound1:
+            r, g, b = self.intermediate(val % 1, r1, r2, 0, bound1),\
+                      self.intermediate(val % 1, g1, g2, 0, bound1),\
+                      self.intermediate(val % 1, b1, b2, 0, bound1)
+        elif val < bound2:
+            r, g, b = self.intermediate(val % 1, r2, r3, bound1, bound2),\
+                      self.intermediate(val % 1, g2, g3, bound1, bound2),\
+                      self.intermediate(val % 1, b2, b3, bound1, bound2)
+        else:
+            r, g, b = self.intermediate(val % 1, r3, r1, bound2, 1),\
+                      self.intermediate(val % 1, g3, g1, bound2, 1),\
+                      self.intermediate(val % 1, b3, b1, bound2, 1)
+
+        color = QtGui.QColor(min(r + self.intermediate(lighten, 0, 255 - r, 0, 1), 255),
+                             min(g + self.intermediate(lighten, 0, 255 - g, 0, 1), 255),
+                             min(b + self.intermediate(lighten, 0, 255 - b, 0, 1), 255))
+        pen = QtGui.QPen(color)
+        pen.setWidth(self.intermediate(lighten, 1, 3, 0, 1))
+        return pen
+
+    def draw_data(self, y_fft, y, val=1):
         """
         Draws data onto canvas
 
-        :param data_y: The y component of the data
-        :type data_y: numpy array
+        :param y_fft: The fourier transform data
+        :type y_fft: numpy array
+
+        :param y: The waveform data
+        :type y: numpy array
+
+        :param val: The amount to expand the ring
+        :type val: float
         """
         self.painter = QtGui.QPainter(self.label.pixmap())
         self.painter.fillRect(0, 0, self.width, self.height, self.black)
 
-        self.painter.setPen(self.cpen)
+        offset = self.max_offset * val
 
         angle = np.linspace(-np.pi * 3 / 2, np.pi / 2, len(y_fft)) * -1
 
-        center_x = self.center_x + np.cos(angle) * self.center_offset
-        center_y = self.center_y + np.sin(angle) * self.center_offset
+        center_x = self.center_x + np.cos(angle) * (self.center_offset + offset)
+        center_y = self.center_y + np.sin(angle) * (self.center_offset + offset)
 
         rot_x = y_fft * np.cos(angle)
         rot_y = y_fft * np.sin(angle)
 
-        rot_x, rot_y = rot_x * self.radius, rot_y * self.radius
+        rot_x, rot_y = rot_x * (self.radius + offset), rot_y * (self.radius + offset)
 
-        lines = []
+        rot_x *= 4 - val
+        rot_y *= 4 - val
 
         for i in np.arange(len(y_fft)):
-            lines.append(QtCore.QLineF(int(center_x[i]), int(center_y[i]),
+            self.painter.setPen(self.get_gradient_pen(i / len(y_fft), val))
+            self.painter.drawLine(QtCore.QLineF(int(center_x[i]), int(center_y[i]),
                                       int(center_x[i] + rot_x[i]), int(center_y[i] + rot_y[i])))
-
-        self.painter.drawLines(lines)
 
         x_vals = np.linspace(0, self.width, self.chunk_size * 2)
         y_vals = y * self.center_y + self.center_y
@@ -110,6 +194,7 @@ class AudioVisualizer:
         for i in np.arange(self.chunk_size * 2):
             points.append(QtCore.QPointF(int(x_vals[i]), int(y_vals[i])))
 
+        self.painter.setPen(self.cpen)
         self.painter.drawPoints(points)
 
         self.painter.end()
@@ -150,7 +235,6 @@ class AudioVisualizer:
 
         # get and pre-process data
         data = self.queue.get()
-        self.queue.queue.clear()  # clears queue to ensure always grabbing newer data
         data = self.decode(data, self.channels, np.int16)
 
         # calculate waveform of data
@@ -159,7 +243,7 @@ class AudioVisualizer:
 
         # smooths waveform values to be more easy on the eyes
         if self.prev_y_wav is not None:
-            y_wav = (1 - self.decay_speed) * self.prev_y_wav + self.decay_speed * y_wav
+            y_wav = (1 - self.wav_decay_speed) * self.prev_y_wav + self.wav_decay_speed * y_wav
 
         # new variable to store any non-essential y_wav transformations
         new_y = np.concatenate((y_wav, np.flipud(y_wav)))
@@ -172,18 +256,26 @@ class AudioVisualizer:
         y_fft = np.abs(np.fft.rfft(data, n=self.fft_size * 2))
         y_fft = np.delete(y_fft, len(y_fft) - 1)
         y_fft = y_fft * 2 / (self.max_freq * 256)   # shifts y_fft to [0, 1]
-        y_fft = y_fft ** 0.5                        # emphasize smaller peaks
+        y_fft = y_fft ** 0.7                        # emphasizes smaller peaks
 
         # smooths frequency spectrum values to be more easy on the eyes
         if self.prev_y_fft is not None:
-            y_fft = (1 - self.decay_speed) * self.prev_y_fft + self.decay_speed * y_fft
+            y_fft = (1 - self.fft_decay_speed) * self.prev_y_fft + self.fft_decay_speed * y_fft
 
-        # draw data
-        self.draw_data(y_fft, new_y)
+        # calculates average values of bass frequencies
+        bass = np.mean(y_fft[0:int(self.bass_index)])
+
+        # smooths bass values
+        if self.prev_bass is not None:
+            bass = (1 - self.bass_decay_speed) * self.prev_bass + self.bass_decay_speed * bass
+
+        # draws data
+        self.draw_data(y_fft[self.low_index:self.high_index], new_y, bass ** 2)
 
         # previous value updates
         self.prev_y_wav = y_wav
         self.prev_y_fft = y_fft
+        self.prev_bass = bass
 
     def open_stream(self):
         """
@@ -201,6 +293,10 @@ class AudioVisualizer:
         # reads from stream and adds to queue until stopped
         while not self.event.is_set():
             data = stream.read(self.chunk_size)
+
+            if not self.queue.empty():
+                self.queue.queue.clear()    # ensures the application always reads the newest data
+
             self.queue.put(data)
             self.frames.append(data)
 
