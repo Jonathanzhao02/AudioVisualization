@@ -156,6 +156,7 @@ class AudioVisualizer:
         # QtPy graphic objects
         self.label = Canvas(self)
         self.label.setMinimumSize(100, 100)
+        self.label.setPalette(QtGui.QPalette(QtCore.Qt.black))
         self.canvas = QtGui.QPixmap(self.width, self.height)
         self.label.setPixmap(self.canvas)
 
@@ -166,7 +167,6 @@ class AudioVisualizer:
         self.cpen = pg.mkPen('c')
 
         # additional variables
-        self.frames = []
         self.queue = Queue(-1)
         self.event = Event()
 
@@ -285,7 +285,8 @@ class AudioVisualizer:
 
         # clears screen
         self.painter = QtGui.QPainter(self.label.pixmap())
-        self.painter.fillRect(0, 0, self.width, self.height, QtCore.Qt.black)
+        self.painter.setCompositionMode(QtGui.QPainter.CompositionMode_DestinationAtop)
+        self.painter.fillRect(0, 0, self.width, self.height, QtCore.Qt.transparent)
 
         # calculates the waveform coordinates
         if self.wav_reflect:
@@ -405,7 +406,7 @@ class AudioVisualizer:
         if self.prev_y_wav is not None:
             y_wav = (1 - self.wav_decay_speed) * self.prev_y_wav + self.wav_decay_speed * y_wav
 
-        # apply blackman harris window to data
+        # apply blackman-harris window to data to normalize values a bit
         window = blackmanharris(self.chunk_size)
         data = window * np.mean(data, axis=1)
 
@@ -414,7 +415,7 @@ class AudioVisualizer:
         y_fft = np.delete(y_fft, len(y_fft) - 1)
         y_fft = y_fft * 2 / (self.max_freq * 256)   # shifts y_fft to [0, 1]
 
-        # calculates average values of bass frequencies
+        # gets highest bass frequency
         bass = np.max(y_fft[0:self.bass_index])
 
         # smooths bass values
@@ -458,7 +459,6 @@ class AudioVisualizer:
                 self.queue.queue.clear()    # ensures the application always reads the newest data
 
             self.queue.put(data)
-            self.frames.append(data)
 
         # closes all streams
         stream.close()
