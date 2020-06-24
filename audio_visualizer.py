@@ -30,7 +30,9 @@ class AudioVisualizer:
                  bass_frequency=260, low_frequency=0, high_frequency=20000,
                  wav_decay_speed=0.5, fft_decay_speed=0.5, bass_decay_speed=0.8,
                  wav_amp_factor=1, fft_amp_factor=0.7, bass_amp_factor=0.8,
-                 tukey_alpha=0.04, width=800, height=800):
+                 bass_max_amp=3,
+                 tukey_alpha=0.04, width=800, height=800,
+                 wav_reflect=False, fft_reflect=False, fft_symmetrical=False):
         """
         Initializes necessary variables and the QApplication objects
 
@@ -76,6 +78,9 @@ class AudioVisualizer:
         :param bass_amp_factor: The exponent to apply to the bass visual effect (lower = more sensitive trigger)
         :type bass_amp_factor: float
 
+        :param bass_max_amp: The maximum amp size of the bass vfx (lower = smaller difference in bar height at max bass)
+        :type bass_max_amp: float
+
         :param tukey_alpha: The alpha of the tukey window applied to the fourier transform (higher = lower low Hz peaks)
         :type tukey_alpha: float
 
@@ -84,6 +89,15 @@ class AudioVisualizer:
 
         :param height: The initial height of the window
         :type height: int
+
+        :param wav_reflect: Whether the waveform should be reflected across the center of the window
+        :type wav_reflect: bool
+
+        :param fft_reflect: Whether the fourier transform should be reflected on the inside of the circle
+        :type fft_reflect: bool
+
+        :param fft_symmetrical: Whether the fourier transform should be reflected on the other side of the circle
+        :type fft_reflect: bool
         """
 
         # setting object variables
@@ -98,10 +112,20 @@ class AudioVisualizer:
         self.wav_amp_factor = wav_amp_factor
         self.fft_amp_factor = fft_amp_factor
         self.bass_amp_factor = bass_amp_factor
+        self.bass_max_amp = bass_max_amp
         self.tukey_alpha = tukey_alpha
+        self.wav_reflect = wav_reflect
+        self.fft_reflect = fft_reflect
+        self.fft_symmetrical = fft_symmetrical
 
         # calculating other important values
-        self.fft_size = int(self.chunk_size / 2)
+        self.fft_size = self.chunk_size / 2
+
+        # helps to save frame rate by drawing half as much data
+        if self.fft_symmetrical:
+            self.fft_size /= 2
+
+        self.fft_size = int(self.fft_size)
 
         self.max_freq = int(self.sample_rate / 2)
         self.min_freq = 0
@@ -125,9 +149,9 @@ class AudioVisualizer:
 
         self.center_x = self.width / 2
         self.center_y = self.height / 2
-        self.center_offset = min(self.width, self.height) / 4
-        self.radius = min(self.width, self.height) / 4
-        self.max_offset = self.radius / 4
+        self.center_radius = min(self.width, self.height) / 4
+        self.fft_radius = min(self.width, self.height) / 8
+        self.max_offset = self.fft_radius / 4
 
         # QtPy graphic objects
         self.label = Canvas(self)
@@ -169,9 +193,9 @@ class AudioVisualizer:
 
         self.center_x = self.width / 2
         self.center_y = self.height / 2
-        self.center_offset = min(self.width, self.height) / 4
-        self.radius = min(self.width, self.height) / 4
-        self.max_offset = self.radius / 4
+        self.center_radius = min(self.width, self.height) / 4
+        self.fft_radius = min(self.width, self.height) / 8
+        self.max_offset = self.fft_radius / 4
 
     @staticmethod
     def intermediate(val, low, high, val_low=0, val_high=1):
@@ -192,6 +216,8 @@ class AudioVisualizer:
 
         :param val_high: The high limit of the value range
         :type val_high: float
+
+        :return: Returns a value mapped between the low and high bounds
         """
 
         if low == high:
@@ -211,6 +237,8 @@ class AudioVisualizer:
 
         :param delta: The alpha of the color and relative width of the pen
         :type val: float
+
+        :return: Returns a QPen with a color from the gradient
         """
 
         bound1 = 1/2
@@ -241,15 +269,15 @@ class AudioVisualizer:
         pen.setWidth(int(self.intermediate(delta, 1, 3)))
         return pen
 
-    def draw_data(self, y, y_fft, val=1):
+    def draw_data(self, y_wav, y_fft, val):
         """
         Draws data onto the QLabel
 
-        :param y: The waveform data
-        :type y: numpy array
+        :param y_wav: The waveform data
+        :type y_wav: ndarray
 
         :param y_fft: The fourier transform data
-        :type y_fft: numpy array
+        :type y_fft: ndarray
 
         :param val: The amount to expand the ring [0, 1]
         :type val: float
@@ -260,13 +288,16 @@ class AudioVisualizer:
         self.painter.fillRect(0, 0, self.width, self.height, QtCore.Qt.black)
 
         # calculates the waveform coordinates
-        x_vals = np.linspace(0, self.width, self.chunk_size * 2)
-        y_vals = y * self.center_y + self.center_y
+        if self.wav_reflect:
+            y_wav = np.concatenate((y_wav, np.flipud(y_wav)))
+
+        x_vals = np.linspace(0, self.width, len(y_wav))
+        y_vals = y_wav * self.center_y + self.center_y
 
         # creates points to be drawn
         points = QtGui.QPolygonF()
 
-        for i in np.arange(self.chunk_size * 2):
+        for i in np.arange(len(y_wav)):
             points.append(QtCore.QPointF(int(x_vals[i]), int(y_vals[i])))
 
         # draws the points on to the QPixmap with a cyan pen
@@ -274,33 +305,45 @@ class AudioVisualizer:
         self.painter.drawPoints(points)
 
         # calculates coordinates for the frequency spectrum circle
+        if not self.fft_symmetrical:
+            y_fft[0:int(len(y_fft) / 2)] *= tukey(len(y_fft), alpha=self.tukey_alpha)[0:int(len(y_fft) / 2)]
+
+        if self.fft_symmetrical:
+            y_fft = np.concatenate((y_fft, np.flipud(y_fft)))
+
         offset = self.max_offset * val
 
         angle = np.linspace(-np.pi * 3 / 2, np.pi / 2, len(y_fft)) * -1
 
-        center_x = self.center_x + np.cos(angle) * (self.center_offset + offset)
-        center_y = self.center_y + np.sin(angle) * (self.center_offset + offset)
-
-        # apply very slight tukey window to lower half of fft data
-        y_fft[0:int(len(y_fft) / 2)] *= tukey(len(y_fft), alpha=self.tukey_alpha)[0:int(len(y_fft) / 2)]
+        center_x = self.center_x + np.cos(angle) * (self.center_radius + offset)
+        center_y = self.center_y + np.sin(angle) * (self.center_radius + offset)
 
         rot_x = y_fft * np.cos(angle)
         rot_y = y_fft * np.sin(angle)
 
-        rot_x = rot_x * (self.radius + offset)
-        rot_y = rot_y * (self.radius + offset)
+        rot_x = rot_x * (self.fft_radius + offset)
+        rot_y = rot_y * (self.fft_radius + offset)
 
-        rot_x *= 1 + val * 3
-        rot_y *= 1 + val * 3
+        rot_x *= 1 + val * self.bass_max_amp
+        rot_y *= 1 + val * self.bass_max_amp
 
         # draws the lines on to the QPixmap with a color gradient pen
-        for i in np.arange(len(y_fft)):
-            self.painter.setPen(self.get_gradient_pen(i / len(y_fft), val))
-            self.painter.drawLine(QtCore.QLineF(
-                                  int(center_x[i]),
-                                  int(center_y[i]),
-                                  int(center_x[i] + rot_x[i]),
-                                  int(center_y[i] + rot_y[i])))
+        if self.fft_reflect:
+            for i in np.arange(len(y_fft)):
+                self.painter.setPen(self.get_gradient_pen(i / len(y_fft), val))
+                self.painter.drawLine(QtCore.QLineF(
+                                      int(center_x[i] - rot_x[i]),
+                                      int(center_y[i] - rot_y[i]),
+                                      int(center_x[i] + rot_x[i]),
+                                      int(center_y[i] + rot_y[i])))
+        else:
+            for i in np.arange(len(y_fft)):
+                self.painter.setPen(self.get_gradient_pen(i / len(y_fft), val))
+                self.painter.drawLine(QtCore.QLineF(
+                                      int(center_x[i]),
+                                      int(center_y[i]),
+                                      int(center_x[i] + rot_x[i]),
+                                      int(center_y[i] + rot_y[i])))
 
         # updates the window graphics
         self.painter.end()
@@ -316,6 +359,17 @@ class AudioVisualizer:
         Samples are interleaved, so for a stereo stream with left channel
         of [L0, L1, L2, ...] and right channel of [R0, R1, R2, ...], the output
         is ordered as [L0, R0, L1, R1, ...]
+        
+        :param in_data: The byte array to split into channels
+        :type in_data: list
+        
+        :param channels: The number of channels in the audio
+        :type channels: int
+        
+        :param data_format: The data format of the bytes
+        :type data_format: type
+
+        :return: Returns an ndarray with the channels split into separate indices
         """
 
         if channels > 2:
@@ -351,9 +405,6 @@ class AudioVisualizer:
         if self.prev_y_wav is not None:
             y_wav = (1 - self.wav_decay_speed) * self.prev_y_wav + self.wav_decay_speed * y_wav
 
-        # new variable to store any non-essential y_wav transformations
-        new_y = np.concatenate((y_wav, np.flipud(y_wav)))
-
         # apply blackman harris window to data
         window = blackmanharris(self.chunk_size)
         data = window * np.mean(data, axis=1)
@@ -375,7 +426,7 @@ class AudioVisualizer:
             y_fft = (1 - self.fft_decay_speed) * self.prev_y_fft + self.fft_decay_speed * y_fft
 
         # draws data
-        self.draw_data(new_y ** self.wav_amp_factor,
+        self.draw_data(y_wav ** self.wav_amp_factor,
                        y_fft[self.low_index:self.high_index] ** self.fft_amp_factor,
                        bass ** self.bass_amp_factor)
 
