@@ -12,57 +12,11 @@ import pyaudio
 import numpy as np
 
 import pyqtgraph as pg
-from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QApplication
 
 from scipy.signal.windows import blackmanharris, tukey
 
-
-class MainWindow(QtWidgets.QMainWindow):
-    def __init__(self):
-        QtWidgets.QMainWindow.__init__(self)
-        self.oldPos = self.pos()
-
-    def mousePressEvent(self, event):
-        self.oldPos = event.globalPos()
-
-    def mouseMoveEvent(self, event):
-        delta = QtCore.QPoint(event.globalPos() - self.oldPos)
-        self.move(self.x() + delta.x(), self.y() + delta.y())
-        self.oldPos = event.globalPos()
-
-
-class Canvas(QtWidgets.QLabel):
-    """
-    Overrides the resizeEvent method of a QLabel
-    to allow for QPixmap auto-scaling
-    """
-
-    def __init__(self, visualizer):
-        """
-        Keeps a reference to the AudioVisualizer object
-        before calling the parent QLabel __init__ method
-
-        :param visualizer: The corresponding AudioVisualizer
-        :type visualizer: AudioVisualizer
-        """
-
-        self.visualizer = visualizer
-        QtWidgets.QLabel.__init__(self)
-
-    def resizeEvent(self, event):
-        """
-        Override of the resizeEvent method that also updates
-        the QLabel QPixmap and visualizer object dimensions
-
-        :param event: The resize event
-        :type event: QEvent
-        """
-
-        pixmap = self.pixmap()
-        self.setPixmap(pixmap.scaled(self.width(), self.height(), aspectRatioMode=QtCore.Qt.IgnoreAspectRatio))
-        self.visualizer.set_dims(self.width(), self.height())
-        QtWidgets.QLabel.resizeEvent(self, event)
+from custom_qt import *
 
 
 class AudioVisualizer:
@@ -163,8 +117,7 @@ class AudioVisualizer:
         pg.setConfigOptions(antialias=True)
         self.traces = dict()
         self.app = QApplication(sys.argv)
-        self.win = MainWindow()
-        self.win.setWindowFlags(QtCore.Qt.WindowFlags(QtCore.Qt.FramelessWindowHint | QtCore.Qt.WindowStaysOnTopHint))
+        self.win = FramelessWindow()
 
         # dimension-related variables
         self.width = width
@@ -181,8 +134,8 @@ class AudioVisualizer:
         self.label.setMinimumSize(100, 100)
         self.canvas = QtGui.QPixmap(self.width, self.height)
         self.label.setPixmap(self.canvas)
-        self.win.setCentralWidget(self.label)
-        self.win.addDockWidget(QtCore.Qt.DockWidgetArea(), QtWidgets.QDockWidget(QtWidgets.QSizeGrip(self.win)))
+
+        self.win.addWidgets(self.label)
         self.win.setWindowTitle("Spectrum")
 
         self.painter = None
@@ -411,7 +364,7 @@ class AudioVisualizer:
         y_fft = y_fft * 2 / (self.max_freq * 256)   # shifts y_fft to [0, 1]
 
         # calculates average values of bass frequencies
-        bass = np.mean(y_fft[0:int(self.bass_index)])
+        bass = np.max(y_fft[0:self.bass_index])
 
         # smooths bass values
         if self.prev_bass is not None:
