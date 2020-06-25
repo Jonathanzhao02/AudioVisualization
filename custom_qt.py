@@ -17,7 +17,7 @@ class FramelessWindow(QtWidgets.QMainWindow):
         self.oldPos = self.pos()
         self.resizeGrip = None
         self.exitButton = None
-        self.setWindowFlags(QtCore.Qt.WindowFlags(QtCore.Qt.FramelessWindowHint | QtCore.Qt.WindowStaysOnTopHint))
+        self.setWindowFlags(QtCore.Qt.WindowFlags(QtCore.Qt.FramelessWindowHint))
 
     def addWidgets(self, centralWidget):
         """
@@ -90,7 +90,7 @@ class ResizeGrip(QtWidgets.QSizeGrip):
 
         QtWidgets.QSizeGrip.__init__(self, parent)
         self.resizing = False
-        self.setPalette(QtGui.QPalette(QtGui.QColor('transparent')))
+        self.setPalette(QtGui.QPalette(QtCore.Qt.blue))
 
     def mousePressEvent(self, event):
         """
@@ -119,7 +119,7 @@ class ExitButton(QtWidgets.QLabel):
         """
 
         QtWidgets.QLabel.__init__(self, parent)
-        self.setPalette(QtGui.QPalette(QtGui.QColor('transparent')))
+        self.setPalette(QtGui.QPalette(QtCore.Qt.transparent))
         self.setText('X')
         self.setAlignment(QtCore.Qt.AlignCenter)
 

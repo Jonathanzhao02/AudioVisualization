@@ -285,8 +285,8 @@ class AudioVisualizer:
 
         # clears screen
         self.painter = QtGui.QPainter(self.label.pixmap())
-        self.painter.setCompositionMode(QtGui.QPainter.CompositionMode_DestinationAtop)
-        self.painter.fillRect(0, 0, self.width, self.height, QtCore.Qt.transparent)
+        self.painter.setCompositionMode(QtGui.QPainter.CompositionMode_Source)
+        self.painter.fillRect(0, 0, self.width, self.height, QtCore.Qt.black)
 
         # calculates the waveform coordinates
         if self.wav_reflect:
