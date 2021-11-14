@@ -28,7 +28,7 @@ visualizer = AudioVisualizer(py_audio=py_audio,
                              wav_amp_factor=1,
                              fft_amp_factor=0.7,
                              bass_amp_factor=0.8,
-                             overall_amp_factor=4000 / RATE,
+                             overall_amp_factor=8000 / RATE,
                              wav_reflect=True,
                              fft_reflect=False,
                              fft_symmetrical=False)
