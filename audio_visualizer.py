@@ -28,7 +28,7 @@ class AudioVisualizer:
     def __init__(self, py_audio, data_format=pyaudio.paInt16,
                  channels=1, sample_rate=48000, chunk_size=1024,
                  bass_frequency=260, low_frequency=0, high_frequency=20000, max_frequency=24000,
-                 wav_decay_speed=0.5, fft_decay_speed=0.5, bass_decay_speed=0.8,
+                 wav_decay_speed=0.5, fft_decay_speed=0.5, bass_decay_speed=0.7,
                  wav_amp_factor=1, fft_amp_factor=0.7, bass_amp_factor=0.8, overall_amp_factor=2,
                  bass_max_amp=3,
                  tukey_alpha=0.04, width=800, height=800,
@@ -135,11 +135,12 @@ class AudioVisualizer:
         self.fft_size = int(self.fft_size)
 
         self.max_freq = min(max_frequency, int(self.sample_rate / 2))
+        self.bass_freq = bass_frequency
 
         if self.max_freq < high_frequency:
             high_frequency = self.max_freq
 
-        self.bass_index = int(bass_frequency / self.max_freq * self.fft_size)
+        self.bass_index = int(self.bass_freq / self.max_freq * self.fft_size)
         self.low_index = int(low_frequency / self.max_freq * self.fft_size)
         self.high_index = int(high_frequency / self.max_freq * self.fft_size)
 
@@ -149,7 +150,7 @@ class AudioVisualizer:
         self.traces = dict()
         self.app = QApplication(sys.argv)
         self.app.setWindowIcon(QtGui.QIcon("icon.png"))
-        self.win = FramelessWindow()
+        self.win = FramelessWindow(self)
 
         # dimension-related variables
         self.width = width
@@ -402,49 +403,52 @@ class AudioVisualizer:
         PyQt plots
         """
 
-        # get and pre-process data
-        data = self.queue.get()
-        data = self.decode(data, self.channels, np.int16) * self.overall_amp_factor
+        try:
+            # get and pre-process data
+            data = self.queue.get()
+            data = self.decode(data, self.channels, np.int16) * self.overall_amp_factor
 
-        # calculate waveform of data
-        y_wav = np.mean(data, axis=1)
-        y_wav = y_wav / self.max_freq   # shifts y_wav to [-1, 1]
+            # calculate waveform of data
+            y_wav = np.mean(data, axis=1)
+            y_wav = y_wav / self.max_freq   # shifts y_wav to [-1, 1]
 
-        # smooths waveform values to be more easy on the eyes
-        if self.prev_y_wav is not None:
-            y_wav = (1 - self.wav_decay_speed) * self.prev_y_wav + self.wav_decay_speed * y_wav
+            # smooths waveform values to be more easy on the eyes
+            if self.prev_y_wav is not None:
+                y_wav = (1 - self.wav_decay_speed) * self.prev_y_wav + self.wav_decay_speed * y_wav
 
-        # apply blackman-harris window to data to normalize values a bit
-        window = blackmanharris(self.chunk_size)
-        data = window * np.mean(data, axis=1)
+            # apply blackman-harris window to data to normalize values a bit
+            window = blackmanharris(self.chunk_size)
+            data = window * np.mean(data, axis=1)
 
-        # calculate fourier transform of data
-        y_fft = np.abs(np.fft.rfft(data, n=self.fft_size * 2))
-        y_fft = np.delete(y_fft, len(y_fft) - 1)
-        y_fft = y_fft * 2 / (self.max_freq * 256)   # shifts y_fft to [0, 1]
+            # calculate fourier transform of data
+            y_fft = np.abs(np.fft.rfft(data, n=self.fft_size * 2))
+            y_fft = np.delete(y_fft, len(y_fft) - 1)
+            y_fft = y_fft * 2 / (self.max_freq * 256)   # shifts y_fft to [0, 1]
 
-        # gets highest bass frequency
-        bass = np.max(y_fft[0:self.bass_index])
+            # gets highest bass frequency
+            bass = np.max(y_fft[0:self.bass_index])
 
-        # smooths bass values
-        if self.prev_bass is not None:
-            bass = (1 - self.bass_decay_speed) * self.prev_bass + self.bass_decay_speed * bass
+            # smooths bass values
+            if self.prev_bass is not None:
+                bass = (1 - self.bass_decay_speed) * self.prev_bass + self.bass_decay_speed * bass
 
-        # smooths frequency spectrum values to be more easy on the eyes
-        if self.prev_y_fft is not None:
-            y_fft = (1 - self.fft_decay_speed) * self.prev_y_fft + self.fft_decay_speed * y_fft
+            # smooths frequency spectrum values to be more easy on the eyes
+            if self.prev_y_fft is not None:
+                y_fft = (1 - self.fft_decay_speed) * self.prev_y_fft + self.fft_decay_speed * y_fft
 
-        # draws data
-        self.draw_data(y_wav ** self.wav_amp_factor,
-                       y_fft[self.low_index:self.high_index] ** self.fft_amp_factor,
-                       bass ** self.bass_amp_factor)
+            # draws data
+            self.draw_data(y_wav ** self.wav_amp_factor,
+                        y_fft[self.low_index:self.high_index] ** self.fft_amp_factor,
+                        bass ** self.bass_amp_factor)
 
-        # previous value updates
-        self.prev_y_wav = y_wav
-        self.prev_y_fft = y_fft
-        self.prev_bass = bass
+            # previous value updates
+            self.prev_y_wav = y_wav
+            self.prev_y_fft = y_fft
+            self.prev_bass = bass
 
-        self.frame_count += 1
+            self.frame_count += 1
+        except:
+            pass
 
     def open_stream(self):
         """

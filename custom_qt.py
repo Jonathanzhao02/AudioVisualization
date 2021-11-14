@@ -11,17 +11,19 @@ class FramelessWindow(QtWidgets.QMainWindow):
     basic functionality such as resizing or closing
     """
 
-    def __init__(self):
+    def __init__(self, visualizer):
         """
         Sets up style and data after calling
         parent __init__ method
         """
 
         QtWidgets.QMainWindow.__init__(self)
+        self.visualizer = visualizer
         self.oldPos = self.pos()
         self.resizeGrip = None
+        self.settingsButton = None
         self.exitButton = None
-        self.setWindowFlags(QtCore.Qt.WindowFlags(QtCore.Qt.FramelessWindowHint))
+        self.setWindowFlags(QtCore.Qt.WindowFlags(QtCore.Qt.FramelessWindowHint | QtCore.Qt.WindowStaysOnTopHint))
 
     def addWidgets(self, centralWidget):
         """
@@ -35,6 +37,7 @@ class FramelessWindow(QtWidgets.QMainWindow):
 
         self.setCentralWidget(centralWidget)
         self.resizeGrip = ResizeGrip(self)
+        self.settingsButton = SettingsButton(self)
         self.exitButton = ExitButton(self)
 
     def resizeEvent(self, event):
@@ -47,6 +50,7 @@ class FramelessWindow(QtWidgets.QMainWindow):
         """
 
         self.exitButton.setGeometry(self.width() - 20, 0, 20, 20)
+        self.settingsButton.setGeometry(20, 0, 20, 20)
         self.resizeGrip.setGeometry(0, 0, 20, 20)
         QtWidgets.QMainWindow.resizeEvent(self, event)
 
@@ -74,6 +78,135 @@ class FramelessWindow(QtWidgets.QMainWindow):
             delta = QtCore.QPoint(event.globalPos() - self.oldPos)
             self.move(self.x() + delta.x(), self.y() + delta.y())
             self.oldPos = event.globalPos()
+
+
+class SettingsPanel(QtWidgets.QWidget):
+    """
+    Input panel for all adjustable parameters
+    """
+    def assign_bass_freq(self, text):
+        self.visualizer.bass_freq = int(text or '0')
+        self.visualizer.bass_index = int(self.visualizer.bass_freq / self.visualizer.max_freq * self.visualizer.fft_size)
+
+    def assign_wav_decay(self, text):
+        self.visualizer.wav_decay_speed = float(text or '0')
+    
+    def assign_fft_decay(self, text):
+        self.visualizer.fft_decay_speed = float(text or '0')
+    
+    def assign_bass_decay(self, text):
+        self.visualizer.bass_decay_speed = float(text or '0')
+    
+    def assign_wav_amp_factor(self, text):
+        self.visualizer.wav_amp_factor = float(text or '0')
+    
+    def assign_fft_amp_factor(self, text):
+        self.visualizer.fft_amp_factor = float(text or '0')
+    
+    def assign_bass_amp_factor(self, text):
+        self.visualizer.bass_amp_factor = float(text or '0')
+    
+    def assign_overall_amp_factor(self, text):
+        self.visualizer.overall_amp_factor = float(text or '0')
+    
+    def assign_bass_max_amp(self, text):
+        self.visualizer.bass_max_amp = float(text or '0')
+    
+    def assign_wav_reflect(self, checked):
+        self.visualizer.wav_reflect = checked
+    
+    def assign_fft_reflect(self, checked):
+        self.visualizer.fft_reflect = checked
+    
+    def assign_fft_symmetrical(self, checked):
+        self.visualizer.fft_symmetrical = checked
+
+    def __init__(self, button):
+        """
+        Sets up style and data after calling
+        parent __init__ method
+        """
+        QtWidgets.QWidget.__init__(self)
+        self.setStyleSheet("background-color: black; color: white;")
+        self.button = button
+        self.visualizer = button.visualizer
+        
+        layout = QtWidgets.QFormLayout()
+        
+        bass_freq_field = QtWidgets.QLineEdit()
+        bass_freq_field.setValidator(QtGui.QIntValidator(0, self.visualizer.max_freq))
+        bass_freq_field.setText(str(self.visualizer.bass_freq))
+        bass_freq_field.textChanged.connect(self.assign_bass_freq)
+        layout.addRow("Bass Frequency", bass_freq_field)
+
+        wav_decay_speed_field = QtWidgets.QLineEdit()
+        wav_decay_speed_field.setValidator(QtGui.QDoubleValidator(0, 1, 2))
+        wav_decay_speed_field.setText(str(self.visualizer.wav_decay_speed))
+        wav_decay_speed_field.textChanged.connect(self.assign_wav_decay)
+        layout.addRow("Wave Decay Speed", wav_decay_speed_field)
+
+        fft_decay_speed_field = QtWidgets.QLineEdit()
+        fft_decay_speed_field.setValidator(QtGui.QDoubleValidator(0, 1, 2))
+        fft_decay_speed_field.setText(str(self.visualizer.fft_decay_speed))
+        fft_decay_speed_field.textChanged.connect(self.assign_fft_decay)
+        layout.addRow("FFT Decay Speed", fft_decay_speed_field)
+
+        bass_decay_speed_field = QtWidgets.QLineEdit()
+        bass_decay_speed_field.setValidator(QtGui.QDoubleValidator(0, 1, 2))
+        bass_decay_speed_field.setText(str(self.visualizer.bass_decay_speed))
+        bass_decay_speed_field.textChanged.connect(self.assign_bass_decay)
+        layout.addRow("Bass Decay Speed", bass_decay_speed_field)
+
+        wav_exp_field = QtWidgets.QLineEdit()
+        wav_exp_field.setValidator(QtGui.QDoubleValidator(0, 1, 2))
+        wav_exp_field.setText(str(self.visualizer.wav_amp_factor))
+        wav_exp_field.textChanged.connect(self.assign_wav_amp_factor)
+        layout.addRow("Wave Exponent", wav_exp_field)
+
+        fft_exp_field = QtWidgets.QLineEdit()
+        fft_exp_field.setValidator(QtGui.QDoubleValidator(0, 1, 2))
+        fft_exp_field.setText(str(self.visualizer.fft_amp_factor))
+        fft_exp_field.textChanged.connect(self.assign_fft_amp_factor)
+        layout.addRow("FFT Exponent", fft_exp_field)
+
+        bass_exp_field = QtWidgets.QLineEdit()
+        bass_exp_field.setValidator(QtGui.QDoubleValidator(0, 1, 2))
+        bass_exp_field.setText(str(self.visualizer.bass_amp_factor))
+        bass_exp_field.textChanged.connect(self.assign_bass_amp_factor)
+        layout.addRow("Bass Exponent", bass_exp_field)
+
+        overall_amp_field = QtWidgets.QLineEdit()
+        overall_amp_field.setValidator(QtGui.QDoubleValidator(0, 10, 2))
+        overall_amp_field.setText(str(self.visualizer.overall_amp_factor))
+        overall_amp_field.textChanged.connect(self.assign_overall_amp_factor)
+        layout.addRow("Amp Factor", overall_amp_field)
+
+        bass_max_amp_field = QtWidgets.QLineEdit()
+        bass_max_amp_field.setValidator(QtGui.QDoubleValidator(0, 10, 2))
+        bass_max_amp_field.setText(str(self.visualizer.bass_max_amp))
+        bass_max_amp_field.textChanged.connect(self.assign_bass_max_amp)
+        layout.addRow("Bass Max Amp", bass_max_amp_field)
+
+        wav_reflect_box = QtWidgets.QCheckBox()
+        wav_reflect_box.setChecked(self.visualizer.wav_reflect)
+        wav_reflect_box.stateChanged.connect(self.assign_wav_reflect)
+        layout.addRow("Wave Reflect", wav_reflect_box)
+
+        fft_reflect_box = QtWidgets.QCheckBox()
+        fft_reflect_box.setChecked(self.visualizer.fft_reflect)
+        fft_reflect_box.stateChanged.connect(self.assign_fft_reflect)
+        layout.addRow("FFT Reflect", fft_reflect_box)
+
+        fft_symmetrical_box = QtWidgets.QCheckBox()
+        fft_symmetrical_box.setChecked(self.visualizer.fft_symmetrical)
+        fft_symmetrical_box.stateChanged.connect(self.assign_fft_symmetrical)
+        layout.addRow("FFT Symmetry", fft_symmetrical_box)
+
+        self.setLayout(layout)
+    
+    def closeEvent(self, event):
+        QtWidgets.QWidget.closeEvent(self, event)
+        self.button.win = None
 
 
 class ResizeGrip(QtWidgets.QSizeGrip):
@@ -107,6 +240,34 @@ class ResizeGrip(QtWidgets.QSizeGrip):
 
         QtWidgets.QSizeGrip.mousePressEvent(self, event)
         self.resizing = True
+
+
+class SettingsButton(QtWidgets.QLabel):
+    """
+    QWidget that allows the user to open a settings panel
+    """
+
+    def __init__(self, parent):
+        """
+        Sets up widget style after calling parent __init__ function
+
+        :param parent: The parent of the QtWidget
+        :type parent: QtWidget
+        """
+
+        QtWidgets.QLabel.__init__(self, parent)
+        self.visualizer = parent.visualizer
+        self.win = None
+        self.setPalette(QtGui.QPalette(QtCore.Qt.transparent))
+        self.setText('\u2699')
+        self.setAlignment(QtCore.Qt.AlignCenter)
+
+    def mousePressEvent(self, event):
+        QtWidgets.QLabel.mousePressEvent(self, event)
+
+        if not self.win:
+            self.win = SettingsPanel(self)
+            self.win.show()
 
 
 class ExitButton(QtWidgets.QLabel):
