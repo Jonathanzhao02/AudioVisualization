@@ -18,7 +18,6 @@ from scipy.signal.windows import blackmanharris, tukey
 
 from custom_qt import *
 
-
 class AudioVisualizer:
     """
     Takes a py_audio instance to create an audio stream
@@ -27,9 +26,9 @@ class AudioVisualizer:
 
     def __init__(self, py_audio, data_format=pyaudio.paInt16,
                  channels=1, sample_rate=48000, chunk_size=1024,
-                 bass_frequency=260, low_frequency=0, high_frequency=20000,
+                 bass_frequency=260, low_frequency=0, high_frequency=20000, max_frequency=24000,
                  wav_decay_speed=0.5, fft_decay_speed=0.5, bass_decay_speed=0.8,
-                 wav_amp_factor=1, fft_amp_factor=0.7, bass_amp_factor=0.8,
+                 wav_amp_factor=1, fft_amp_factor=0.7, bass_amp_factor=0.8, overall_amp_factor=2,
                  bass_max_amp=3,
                  tukey_alpha=0.04, width=800, height=800,
                  wav_reflect=False, fft_reflect=False, fft_symmetrical=False):
@@ -60,6 +59,9 @@ class AudioVisualizer:
         :param high_frequency: The highest frequency to display
         :type high_frequency: int
 
+        :param max_frequency: The highest frequency to consider from the FFT
+        :type max_frequency: int
+
         :param wav_decay_speed: The rate at which the waveform should decay
         :type wav_decay_speed: float
 
@@ -77,6 +79,9 @@ class AudioVisualizer:
 
         :param bass_amp_factor: The exponent to apply to the bass visual effect (lower = more sensitive trigger)
         :type bass_amp_factor: float
+
+        :param overall_amp_factor: A multiplicative factor to apply to audio (higher = higher amplitude)
+        :type overall_amp_factor: float
 
         :param bass_max_amp: The maximum amp size of the bass vfx (lower = smaller difference in bar height at max bass)
         :type bass_max_amp: float
@@ -97,7 +102,7 @@ class AudioVisualizer:
         :type fft_reflect: bool
 
         :param fft_symmetrical: Whether the fourier transform should be reflected on the other side of the circle
-        :type fft_reflect: bool
+        :type fft_symmetrical: bool
         """
 
         # setting object variables
@@ -112,6 +117,7 @@ class AudioVisualizer:
         self.wav_amp_factor = wav_amp_factor
         self.fft_amp_factor = fft_amp_factor
         self.bass_amp_factor = bass_amp_factor
+        self.overall_amp_factor = overall_amp_factor
         self.bass_max_amp = bass_max_amp
         self.tukey_alpha = tukey_alpha
         self.wav_reflect = wav_reflect
@@ -127,8 +133,7 @@ class AudioVisualizer:
 
         self.fft_size = int(self.fft_size)
 
-        self.max_freq = int(self.sample_rate / 2)
-        self.min_freq = 0
+        self.max_freq = min(max_frequency, int(self.sample_rate / 2))
 
         if self.max_freq < high_frequency:
             high_frequency = self.max_freq
@@ -396,7 +401,7 @@ class AudioVisualizer:
 
         # get and pre-process data
         data = self.queue.get()
-        data = self.decode(data, self.channels, np.int16)
+        data = self.decode(data, self.channels, np.int16) * self.overall_amp_factor
 
         # calculate waveform of data
         y_wav = np.mean(data, axis=1)
