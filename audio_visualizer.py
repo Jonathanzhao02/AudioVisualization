@@ -146,6 +146,7 @@ class AudioVisualizer:
         pg.setConfigOptions(antialias=True)
         self.traces = dict()
         self.app = QApplication(sys.argv)
+        self.app.setWindowIcon(QtGui.QIcon("icon.png"))
         self.win = FramelessWindow()
 
         # dimension-related variables
