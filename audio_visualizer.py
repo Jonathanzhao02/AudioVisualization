@@ -13,6 +13,7 @@ import numpy as np
 
 import pyqtgraph as pg
 from PyQt5.QtWidgets import QApplication
+import signal
 
 from scipy.signal.windows import blackmanharris, tukey
 
@@ -143,6 +144,7 @@ class AudioVisualizer:
         self.high_index = int(high_frequency / self.max_freq * self.fft_size)
 
         # sets up QtPy application
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
         pg.setConfigOptions(antialias=True)
         self.traces = dict()
         self.app = QApplication(sys.argv)
