@@ -1,3 +1,7 @@
+"""
+Contains all implementations of Qt objects
+"""
+
 from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
 
 
