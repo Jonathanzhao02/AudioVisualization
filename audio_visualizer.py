@@ -135,14 +135,13 @@ class AudioVisualizer:
         self.fft_size = int(self.fft_size)
 
         self.max_freq = min(max_frequency, int(self.sample_rate / 2))
-        self.bass_freq = bass_frequency
-
-        if self.max_freq < high_frequency:
-            high_frequency = self.max_freq
+        self.low_freq = max(0, low_frequency)
+        self.high_freq = min(self.max_freq, high_frequency)
+        self.bass_freq = max(0, bass_frequency)
 
         self.bass_index = int(self.bass_freq / self.max_freq * self.fft_size)
-        self.low_index = int(low_frequency / self.max_freq * self.fft_size)
-        self.high_index = int(high_frequency / self.max_freq * self.fft_size)
+        self.low_index = int(self.low_freq / self.max_freq * self.fft_size)
+        self.high_index = int(self.high_freq / self.max_freq * self.fft_size)
 
         # sets up QtPy application
         signal.signal(signal.SIGINT, signal.SIG_DFL)

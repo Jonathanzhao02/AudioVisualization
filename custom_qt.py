@@ -87,6 +87,20 @@ class SettingsPanel(QtWidgets.QWidget):
     def assign_bass_freq(self, text):
         self.visualizer.bass_freq = int(text or '0')
         self.visualizer.bass_index = int(self.visualizer.bass_freq / self.visualizer.max_freq * self.visualizer.fft_size)
+    
+    def assign_low_freq(self, text):
+        self.visualizer.low_freq = int(text or '0')
+        self.visualizer.low_index = int(self.visualizer.low_freq / self.visualizer.max_freq * self.visualizer.fft_size)
+    
+    def assign_high_freq(self, text):
+        self.visualizer.high_freq = int(text or '1')
+        self.visualizer.high_index = int(self.visualizer.high_freq / self.visualizer.max_freq * self.visualizer.fft_size)
+    
+    def assign_max_freq(self, text):
+        self.visualizer.max_freq = int(text or '1')
+        self.visualizer.bass_index = int(self.visualizer.bass_freq / self.visualizer.max_freq * self.visualizer.fft_size)
+        self.visualizer.low_index = int(self.visualizer.low_freq / self.visualizer.max_freq * self.visualizer.fft_size)
+        self.visualizer.high_index = int(self.visualizer.high_freq / self.visualizer.max_freq * self.visualizer.fft_size)
 
     def assign_wav_decay(self, text):
         self.visualizer.wav_decay_speed = float(text or '0')
@@ -134,10 +148,28 @@ class SettingsPanel(QtWidgets.QWidget):
         layout = QtWidgets.QFormLayout()
         
         bass_freq_field = QtWidgets.QLineEdit()
-        bass_freq_field.setValidator(QtGui.QIntValidator(0, self.visualizer.max_freq))
+        bass_freq_field.setValidator(QtGui.QIntValidator(0, self.visualizer.sample_rate // 2))
         bass_freq_field.setText(str(self.visualizer.bass_freq))
         bass_freq_field.textChanged.connect(self.assign_bass_freq)
         layout.addRow("Bass Frequency", bass_freq_field)
+
+        low_freq_field = QtWidgets.QLineEdit()
+        low_freq_field.setValidator(QtGui.QIntValidator(0, self.visualizer.sample_rate // 2))
+        low_freq_field.setText(str(self.visualizer.low_freq))
+        low_freq_field.textChanged.connect(self.assign_low_freq)
+        layout.addRow("Low Frequency", low_freq_field)
+
+        high_freq_field = QtWidgets.QLineEdit()
+        high_freq_field.setValidator(QtGui.QIntValidator(1, self.visualizer.sample_rate // 2))
+        high_freq_field.setText(str(self.visualizer.high_freq))
+        high_freq_field.textChanged.connect(self.assign_high_freq)
+        layout.addRow("High Frequency", high_freq_field)
+        
+        max_freq_field = QtWidgets.QLineEdit()
+        max_freq_field.setValidator(QtGui.QIntValidator(1, self.visualizer.sample_rate // 2))
+        max_freq_field.setText(str(self.visualizer.max_freq))
+        max_freq_field.textChanged.connect(self.assign_max_freq)
+        layout.addRow("Max Frequency", max_freq_field)
 
         wav_decay_speed_field = QtWidgets.QLineEdit()
         wav_decay_speed_field.setValidator(QtGui.QDoubleValidator(0, 1, 2))
