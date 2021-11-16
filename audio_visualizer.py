@@ -436,7 +436,7 @@ class AudioVisualizer:
                 y_fft = (1 - self.fft_decay_speed) * self.prev_y_fft + self.fft_decay_speed * y_fft
 
             # draws data
-            self.draw_data(y_wav ** self.wav_amp_factor,
+            self.draw_data(np.sign(y_wav) * (np.abs(y_wav) ** self.wav_amp_factor),
                         y_fft[self.low_index:self.high_index] ** self.fft_amp_factor,
                         bass ** self.bass_amp_factor)
 
